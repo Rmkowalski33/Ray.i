@@ -1,0 +1,83 @@
+# FTRV Order Allocation Adjustments
+# ==================================
+# Use this file to adjust how inventory needs are allocated across manufacturers.
+# These adjustments override historical patterns based on your strategic direction.
+#
+# ADJUSTMENT TYPES:
+# - manufacturer: Adjust a manufacturer's overall allocation
+# - make: Adjust a specific make/brand line
+# - segment: Adjust a vehicle type segment (TT, FW, MH, TH)
+# - zone: Adjust allocation for a geographic zone
+#
+# ADJUSTMENT VALUES:
+# - Use percentages: "+20%", "-30%", "+50%"
+# - Positive = increase allocation, Negative = decrease
+# - Adjustments are applied multiplicatively to the base allocation
+#
+# EXAMPLES:
+# - "+20%" on JAYCO means if fair share was 100 units, it becomes 120
+# - "-30%" on JAY FEATHER means if fair share was 50 units, it becomes 35
+
+adjustments:
+  # =====================================================
+  # ACTIVE ADJUSTMENTS
+  # =====================================================
+
+  # SAMPLE: Increase Jayco allocation by 25%
+  - type: manufacturer
+    target: JAYCO
+    adjustment: "+25%"
+    note: "Expanding Jayco partnership - testing strategic adjustment"
+    active: true
+
+  # =====================================================
+  # MANUFACTURER ADJUSTMENTS (uncomment to activate)
+  # =====================================================
+
+  # - type: manufacturer
+  #   target: KEYSTONE
+  #   adjustment: "-10%"
+  #   note: "Reducing Keystone exposure"
+  #   active: true
+
+  # - type: manufacturer
+  #   target: FOREST RIVER
+  #   adjustment: "+15%"
+  #   note: "Strong performer - increase allocation"
+  #   active: true
+
+  # =====================================================
+  # MAKE/BRAND LINE ADJUSTMENTS
+  # =====================================================
+
+  # - type: make
+  #   target: JAY FEATHER
+  #   adjustment: "-30%"
+  #   note: "Phasing out Jay Feather line - not selling well"
+  #   active: true
+
+  # - type: make
+  #   target: WILDWOOD
+  #   adjustment: "+25%"
+  #   note: "Wildwood selling above expectations - increase stock"
+  #   active: true
+
+  # =====================================================
+  # SEGMENT ADJUSTMENTS
+  # =====================================================
+
+  # - type: segment
+  #   target: TT
+  #   adjustment: "+15%"
+  #   note: "Focus on travel trailers - entry-level market growing"
+  #   active: true
+
+  # =====================================================
+  # ZONE/LOCATION ADJUSTMENTS
+  # =====================================================
+
+  # - type: zone
+  #   target: TX-SOUTH
+  #   adjustment: "+20%"
+  #   note: "Expanding TX-SOUTH locations"
+  #   active: true

@@ -1,0 +1,215 @@
+# FTRV Data Quality Exceptions
+# =============================
+# Add entries below to approve items that are flagged but not actual errors.
+# Each entry needs: code, type, key_fields, and optionally note/approved_by/approved_date
+#
+# Error Code Reference:
+# ---------------------
+# REL001: Make appears under multiple manufacturers
+# REL002: Make appears as multiple vehicle types
+# REL003: Model appears under multiple makes
+# TYP001: Potential typo - similar strings
+# DT001-DT007: Date logic issues
+# OUT001-OUT007: Outliers (investigate, not necessarily errors)
+# See exceptions_config.py for full list
+#
+# HOW TO ADD EXCEPTIONS:
+# 1. Find the error code from the report
+# 2. Copy the template below for that code type
+# 3. Fill in the key_fields to match the specific item
+# 4. Add your note explaining why it's approved
+# 5. Run the analysis again - the item will be skipped
+
+approved_exceptions:
+  # =====================================================
+  # RELATIONSHIP EXCEPTIONS (REL001, REL002, REL003)
+  # =====================================================
+
+  # PUMA is legitimately sold by both Palomino and Forest River
+  - code: REL001
+    type: make_manufacturer
+    key_fields:
+      make: PUMA
+      manufacturers: [FOREST RIVER, PALOMINO]
+    note: "PUMA brand is sold by both Palomino and Forest River divisions - this is correct"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: REL001
+    type: make_manufacturer
+    key_fields:
+      make: PUMA CAMPING EDITION
+      manufacturers: [FOREST RIVER, PALOMINO]
+    note: "PUMA CAMPING EDITION sold by both divisions"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: REL001
+    type: make_manufacturer
+    key_fields:
+      make: COLUMBUS
+      manufacturers: [FOREST RIVER, PALOMINO]
+    note: "COLUMBUS sold by both divisions"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  # =====================================================
+  # TYPO EXCEPTIONS (TYP001)
+  # These are NOT typos - they are different product lines
+  # =====================================================
+
+  # CLIPPER series - these are different size classes, not typos
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CLIPPER 3K SERIES
+      value2: CLIPPER 4K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CLIPPER 3K SERIES
+      value2: CLIPPER 5K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CLIPPER 3K SERIES
+      value2: CLIPPER 6K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CLIPPER 4K SERIES
+      value2: CLIPPER 5K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CLIPPER 4K SERIES
+      value2: CLIPPER 6K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CLIPPER 5K SERIES
+      value2: CLIPPER 6K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  # VIKING series - same as CLIPPER, different weight classes
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: VIKING 3K SERIES
+      value2: VIKING 5K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: VIKING 3K SERIES
+      value2: VIKING 6K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: VIKING 5K SERIES
+      value2: VIKING 6K SERIES
+    note: "Different product series (weight classes), not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  # CATALINA SUMMIT - different series numbers
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: CATALINA SUMMIT SERIES 7
+      value2: CATALINA SUMMIT SERIES 8
+    note: "Different product series, not typos"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  # SURVEYOR variants
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: SURVEYOR LEGEND
+      value2: SURVEYOR LEGEND X
+    note: "LEGEND X is an upgraded trim level, not a typo"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  # MODEL series - these are generic model designations
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: MODEL G
+      value2: MODEL I
+    note: "Different model designations"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: MODEL G
+      value2: MODEL Z
+    note: "Different model designations"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: MODEL I
+      value2: MODEL IX
+    note: "Different model designations (IX is extended version)"
+    approved_by: System
+    approved_date: "2026-02-05"
+
+  - code: TYP001
+    type: similar_strings
+    key_fields:
+      field: Make
+      value1: MODEL I
+      value2: MODEL Z
+    note: "Different model designations"
+    approved_by: System
+    approved_date: "2026-02-05"
+

@@ -1,0 +1,238 @@
+# =============================================================================
+# FTRV ORDER RECOMMENDATION ENGINE - SETTINGS
+# =============================================================================
+# This file contains all configurable settings for the order recommendation
+# system. Edit values here - no need to modify Python code.
+#
+# To apply changes: Just save this file and re-run the tool.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# FILE PATHS
+# -----------------------------------------------------------------------------
+# Change these if your data files are in different locations
+
+paths:
+  # Where all source data is located (READ ONLY)
+  data_hub: "C:\\Users\\Raymond Kowalski\\OneDrive\\Desktop\\RV Reporting\\Data Hub"
+
+  # Where reports are saved
+  output: "C:\\Users\\Raymond Kowalski\\OneDrive\\Desktop\\Claude Toolkit\\output"
+
+# Data file names (relative to data_hub path)
+files:
+  inventory: "Inventory_Extract.xlsx"
+  references: "FTRV Index & References.xlsx"
+  ssi_data: "SSI/SSI Full Data.csv"
+  ssi_fact_tables: "SSI/FTRV SSI Fact Tables.xlsx"
+  brand_licensing: "Brand Licensing.xlsx"
+
+# Excel sheet names within each file
+sheets:
+  inventory_records: "Inventory Records"
+  retail_units: "Retail Units"
+  on_order: "On Order"
+  locations: "Locations"
+  status_normalized: "Status - Normalized"
+  product: "Product"
+
+
+# -----------------------------------------------------------------------------
+# FORECAST & ANALYSIS PARAMETERS
+# -----------------------------------------------------------------------------
+
+forecast:
+  # Default order period in months (common values: 3, 4, 6, 12)
+  default_months: 3
+
+  # How many months of history to analyze for demand patterns
+  lookback_months: 12
+
+
+# -----------------------------------------------------------------------------
+# INVENTORY TARGETS
+# -----------------------------------------------------------------------------
+# Days supply thresholds determine inventory health status
+
+inventory_targets:
+  # Ideal inventory level (days of supply)
+  target_days_supply: 90
+
+  # Below this = REORDER trigger
+  min_days_supply: 60
+
+  # Above this = OVERSTOCKED warning
+  max_days_supply: 150
+
+  # Below this = CRITICAL/URGENT reorder
+  critical_days_supply: 45
+
+
+# -----------------------------------------------------------------------------
+# LEAD TIME ASSUMPTIONS (in days)
+# -----------------------------------------------------------------------------
+# Total lead time = sum of all steps below
+
+lead_time:
+  # Manufacturing/build time (4-6 weeks typical)
+  manufacturing_days: 35
+
+  # Shipping from factory to PDI center
+  transit_to_pdi_days: 14
+
+  # PDI inspection and prep time
+  pdi_processing_days: 7
+
+  # Final delivery to stores
+  transit_to_store_days: 14
+
+
+# -----------------------------------------------------------------------------
+# FINANCIAL PARAMETERS
+# -----------------------------------------------------------------------------
+
+financial:
+  # Annual floorplan interest rate (as decimal: 0.08 = 8%)
+  floorplan_rate: 0.08
+
+  # Target annual inventory turns
+  target_turn_rate: 4.0
+
+  # Minimum acceptable front-end margin (as decimal: 0.05 = 5%)
+  min_acceptable_margin: 0.05
+
+
+# -----------------------------------------------------------------------------
+# SEASONALITY INDEX
+# -----------------------------------------------------------------------------
+# Index by month (100 = average). Higher = more demand, lower = less demand.
+# Based on RV industry buying patterns.
+
+seasonality:
+  january: 120      # RV show season begins
+  february: 130     # Peak show season
+  march: 115        # Spring buying starts
+  april: 105
+  may: 100          # Average baseline
+  june: 95
+  july: 85          # Summer slowdown
+  august: 80        # Lowest demand month
+  september: 90     # Fall uptick
+  october: 95
+  november: 85
+  december: 100     # Year-end deals
+
+
+# -----------------------------------------------------------------------------
+# AGE BUCKETS
+# -----------------------------------------------------------------------------
+# Define how inventory age is categorized (in days)
+
+age_buckets:
+  fresh: [0, 30]
+  good: [31, 60]
+  aging: [61, 90]
+  stale: [91, 120]
+  problem: [121, 180]
+  critical: [181, 9999]
+
+
+# -----------------------------------------------------------------------------
+# STATUS CLASSIFICATIONS
+# -----------------------------------------------------------------------------
+# Categorize inventory statuses for analysis
+
+status_categories:
+  # Statuses considered "available for sale"
+  sellable:
+    - "RVASAP"
+    - "READY FOR SALE"
+    - "SHOWROOM"
+    - "PRE PDI"
+    - "HAIL DAMAGE"
+    - "AS IS"
+    - "RESTOCK"
+
+  # Statuses that are temporarily unavailable
+  constrained:
+    - "SALE PENDING"
+    - "AWAITING TITLE"
+    - "AWAITING PARTS"
+    - "IN SERVICE"
+    - "TRANSFER"
+    - "DISPATCHED"
+
+  # Statuses for units being exited/wholesaled
+  dead:
+    - "WHOLESALE - USED"
+    - "TRADE IN"
+    - "BUYBACK"
+    - "INSURANCE CLAIM"
+    - "STORM DAMAGE"
+    - "FACTORY REVIEW"
+
+
+# -----------------------------------------------------------------------------
+# VEHICLE TYPE MAPPINGS
+# -----------------------------------------------------------------------------
+
+vehicle_types:
+  TT: "Travel Trailer"
+  FW: "Fifth Wheel"
+  TH: "Toy Hauler"
+  MH: "Motorhome"
+  CT/EXP: "Camping Trailer"
+
+
+# -----------------------------------------------------------------------------
+# PRICE GROUP THRESHOLDS
+# -----------------------------------------------------------------------------
+# Retail price boundaries for price group classification
+
+price_groups:
+  - label: "Under $10K"
+    max: 10000
+  - label: "$10K-$20K"
+    max: 20000
+  - label: "$20K-$30K"
+    max: 30000
+  - label: "$30K-$40K"
+    max: 40000
+  - label: "$40K-$50K"
+    max: 50000
+  - label: "$50K-$75K"
+    max: 75000
+  - label: "$75K-$100K"
+    max: 100000
+  - label: "$100K+"
+    max: 999999999
+
+
+# -----------------------------------------------------------------------------
+# RECOMMENDATION PARAMETERS
+# -----------------------------------------------------------------------------
+
+recommendations:
+  # Minimum sales count to calculate reliable velocity
+  min_sample_size: 5
+
+  # Safety stock buffer (as decimal: 0.10 = 10%)
+  safety_buffer_pct: 0.10
+
+  # Maximum models to include in report
+  max_models_in_report: 100
+
+
+# -----------------------------------------------------------------------------
+# DEFAULT FILTERS (optional)
+# -----------------------------------------------------------------------------
+# Set default filters here, or leave empty/null to include all
+
+default_filters:
+  manufacturer: null      # e.g., "FOREST RIVER" or null for all
+  make: null              # e.g., "IMPRESSION" or null for all
+  vehicle_types: null     # e.g., ["TT", "FW"] or null for all
+  locations: null         # e.g., ["AMA", "DAL", "HOU"] or null for all
+  zones: null             # e.g., ["TX-NCENTRAL", "EAST US"] or null for all
+  price_groups: null      # e.g., ["$50K-$75K", "$75K-$100K"] or null for all
