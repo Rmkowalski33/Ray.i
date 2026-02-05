@@ -60,17 +60,20 @@ class OrderRecommendationApp:
 
         # Create tabs
         self.order_tab = ttk.Frame(self.notebook)
+        self.forecast_tab = ttk.Frame(self.notebook)
         self.capacity_tab = ttk.Frame(self.notebook)
         self.reconciliation_tab = ttk.Frame(self.notebook)
         self.yoy_tab = ttk.Frame(self.notebook)
 
         self.notebook.add(self.order_tab, text="Order Generator")
+        self.notebook.add(self.forecast_tab, text="Order Forecast")
         self.notebook.add(self.capacity_tab, text="Capacity Analysis")
         self.notebook.add(self.reconciliation_tab, text="Reconciliation")
         self.notebook.add(self.yoy_tab, text="YoY Dashboard")
 
         # Build each tab
         self._create_order_tab()
+        self._create_forecast_tab()
         self._create_capacity_tab()
         self._create_reconciliation_tab()
         self._create_yoy_tab()
@@ -354,6 +357,633 @@ class OrderRecommendationApp:
         results_scroll = ttk.Scrollbar(results_frame, command=self.results_text.yview)
         results_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.results_text.config(yscrollcommand=results_scroll.set)
+
+    # =========================================================================
+    # ORDER FORECAST TAB (Global Max Orders by Type)
+    # =========================================================================
+
+    def _create_forecast_tab(self):
+        """Create the Order Forecast tab for company-wide order planning by type."""
+        # Main content frame
+        main_frame = ttk.Frame(self.forecast_tab, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        subtitle = ttk.Label(
+            main_frame,
+            text="Company-Wide Order Forecast: Input forecasted retails to calculate required orders by vehicle type",
+            font=("Helvetica", 10, "italic")
+        )
+        subtitle.pack(pady=(0, 10))
+
+        # ================================================================
+        # PLANNING HORIZON
+        # ================================================================
+        horizon_frame = ttk.LabelFrame(main_frame, text="1. Planning Horizon", padding="10")
+        horizon_frame.pack(fill=tk.X, pady=5)
+
+        horizon_row = ttk.Frame(horizon_frame)
+        horizon_row.pack(fill=tk.X)
+
+        ttk.Label(horizon_row, text="Number of Months:").pack(side=tk.LEFT)
+        self.forecast_months_var = tk.StringVar(value="3")
+        self.forecast_months_combo = ttk.Combobox(
+            horizon_row,
+            textvariable=self.forecast_months_var,
+            values=["1", "2", "3", "4", "5", "6", "9", "12"],
+            width=10,
+            state="readonly"
+        )
+        self.forecast_months_combo.pack(side=tk.LEFT, padx=10)
+        self.forecast_months_combo.bind("<<ComboboxSelected>>", self._on_forecast_months_changed)
+
+        ttk.Button(
+            horizon_row,
+            text="Update Grid",
+            command=self._update_forecast_grid
+        ).pack(side=tk.LEFT, padx=20)
+
+        # Target days supply
+        ttk.Label(horizon_row, text="Target Days Supply:").pack(side=tk.LEFT, padx=(30, 0))
+        self.forecast_target_days_var = tk.StringVar(value="90")
+        target_spin = ttk.Spinbox(
+            horizon_row,
+            from_=30,
+            to=180,
+            width=8,
+            textvariable=self.forecast_target_days_var
+        )
+        target_spin.pack(side=tk.LEFT, padx=5)
+
+        # ================================================================
+        # CURRENT POSITION (Read-Only)
+        # ================================================================
+        position_frame = ttk.LabelFrame(main_frame, text="2. Current Position by Type (Auto-Loaded)", padding="10")
+        position_frame.pack(fill=tk.X, pady=5)
+
+        # Headers
+        pos_header = ttk.Frame(position_frame)
+        pos_header.pack(fill=tk.X)
+
+        ttk.Label(pos_header, text="Type", width=8, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(pos_header, text="Current Inv", width=12, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(pos_header, text="Pipeline", width=12, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(pos_header, text="Total Position", width=12, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(pos_header, text="Avg Monthly Velocity", width=16, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+
+        # Position data rows
+        self.forecast_position_vars = {}
+        for vt in ["TT", "FW", "MH", "TH"]:
+            row = ttk.Frame(position_frame)
+            row.pack(fill=tk.X, pady=2)
+
+            ttk.Label(row, text=vt, width=8).pack(side=tk.LEFT, padx=5)
+
+            inv_var = tk.StringVar(value="--")
+            pipe_var = tk.StringVar(value="--")
+            total_var = tk.StringVar(value="--")
+            velocity_var = tk.StringVar(value="--")
+
+            ttk.Label(row, textvariable=inv_var, width=12).pack(side=tk.LEFT, padx=5)
+            ttk.Label(row, textvariable=pipe_var, width=12).pack(side=tk.LEFT, padx=5)
+            ttk.Label(row, textvariable=total_var, width=12, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+            ttk.Label(row, textvariable=velocity_var, width=16).pack(side=tk.LEFT, padx=5)
+
+            self.forecast_position_vars[vt] = {
+                "inventory": inv_var,
+                "pipeline": pipe_var,
+                "total": total_var,
+                "velocity": velocity_var
+            }
+
+        ttk.Button(
+            position_frame,
+            text="Refresh Position Data",
+            command=self._refresh_forecast_position
+        ).pack(pady=(10, 0))
+
+        # ================================================================
+        # FORECASTED RETAILS INPUT GRID
+        # ================================================================
+        retail_frame = ttk.LabelFrame(main_frame, text="3. Enter Forecasted Retails by Month", padding="10")
+        retail_frame.pack(fill=tk.X, pady=5)
+
+        # Container for the dynamic grid
+        self.forecast_grid_frame = ttk.Frame(retail_frame)
+        self.forecast_grid_frame.pack(fill=tk.X)
+
+        # Will hold Entry widgets for forecasted retails: {(veh_type, month_idx): Entry}
+        self.forecast_retail_entries = {}
+
+        # Initialize the grid
+        self._update_forecast_grid()
+
+        # ================================================================
+        # RESULTS
+        # ================================================================
+        results_frame = ttk.LabelFrame(main_frame, text="4. Order Requirements by Type", padding="10")
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        # Results treeview
+        self.forecast_results_tree = ttk.Treeview(
+            results_frame,
+            columns=("type", "current_inv", "pipeline", "forecast_retail", "ending_inv", "target_inv", "orders_needed"),
+            show="headings",
+            height=6
+        )
+        self.forecast_results_tree.heading("type", text="Type")
+        self.forecast_results_tree.heading("current_inv", text="Current Inv")
+        self.forecast_results_tree.heading("pipeline", text="Pipeline")
+        self.forecast_results_tree.heading("forecast_retail", text="Forecast Retails")
+        self.forecast_results_tree.heading("ending_inv", text="Ending Inv")
+        self.forecast_results_tree.heading("target_inv", text="Target Inv")
+        self.forecast_results_tree.heading("orders_needed", text="ORDERS NEEDED")
+
+        self.forecast_results_tree.column("type", width=60, anchor=tk.W)
+        self.forecast_results_tree.column("current_inv", width=90, anchor=tk.CENTER)
+        self.forecast_results_tree.column("pipeline", width=80, anchor=tk.CENTER)
+        self.forecast_results_tree.column("forecast_retail", width=110, anchor=tk.CENTER)
+        self.forecast_results_tree.column("ending_inv", width=90, anchor=tk.CENTER)
+        self.forecast_results_tree.column("target_inv", width=90, anchor=tk.CENTER)
+        self.forecast_results_tree.column("orders_needed", width=120, anchor=tk.CENTER)
+
+        results_scroll = ttk.Scrollbar(results_frame, orient=tk.VERTICAL, command=self.forecast_results_tree.yview)
+        self.forecast_results_tree.configure(yscrollcommand=results_scroll.set)
+        self.forecast_results_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        results_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Totals row
+        totals_frame = ttk.Frame(results_frame)
+        totals_frame.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Label(totals_frame, text="TOTAL ORDERS NEEDED:", font=("Helvetica", 11, "bold")).pack(side=tk.LEFT)
+        self.forecast_total_orders_var = tk.StringVar(value="--")
+        ttk.Label(
+            totals_frame,
+            textvariable=self.forecast_total_orders_var,
+            font=("Helvetica", 14, "bold"),
+            foreground="blue"
+        ).pack(side=tk.LEFT, padx=10)
+
+        # Monthly breakdown text
+        monthly_frame = ttk.LabelFrame(main_frame, text="Monthly Order Breakdown", padding="5")
+        monthly_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        self.forecast_monthly_text = tk.Text(monthly_frame, height=8, wrap=tk.WORD)
+        self.forecast_monthly_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        monthly_scroll = ttk.Scrollbar(monthly_frame, command=self.forecast_monthly_text.yview)
+        monthly_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.forecast_monthly_text.config(yscrollcommand=monthly_scroll.set)
+
+        # ================================================================
+        # BUTTONS
+        # ================================================================
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=10)
+
+        ttk.Button(
+            btn_frame,
+            text="Calculate Order Requirements",
+            command=self._run_order_forecast
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            btn_frame,
+            text="Export to Excel",
+            command=self._export_forecast_to_excel
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            btn_frame,
+            text="Use Historical Velocity",
+            command=self._populate_forecast_from_velocity
+        ).pack(side=tk.LEFT, padx=20)
+
+    def _on_forecast_months_changed(self, event=None):
+        """Handle forecast months selection change."""
+        self._update_forecast_grid()
+
+    def _update_forecast_grid(self):
+        """Update the forecast input grid based on selected months."""
+        # Clear existing grid
+        for widget in self.forecast_grid_frame.winfo_children():
+            widget.destroy()
+        self.forecast_retail_entries.clear()
+
+        num_months = int(self.forecast_months_var.get())
+
+        # Generate month labels starting from next month
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        start_date = datetime.now() + relativedelta(months=1)
+        month_labels = []
+        for i in range(num_months):
+            month_date = start_date + relativedelta(months=i)
+            month_labels.append(month_date.strftime("%b %Y"))
+
+        # Header row
+        header_row = ttk.Frame(self.forecast_grid_frame)
+        header_row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(header_row, text="Type", width=8, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        for month_label in month_labels:
+            ttk.Label(header_row, text=month_label, width=10, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=2)
+        ttk.Label(header_row, text="TOTAL", width=10, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+
+        # Data rows for each vehicle type
+        self.forecast_total_vars = {}
+        for vt in ["TT", "FW", "MH", "TH"]:
+            row = ttk.Frame(self.forecast_grid_frame)
+            row.pack(fill=tk.X, pady=2)
+
+            ttk.Label(row, text=vt, width=8).pack(side=tk.LEFT, padx=5)
+
+            for i, month_label in enumerate(month_labels):
+                entry = ttk.Entry(row, width=10, justify=tk.CENTER)
+                entry.insert(0, "0")
+                entry.pack(side=tk.LEFT, padx=2)
+                entry.bind("<FocusOut>", lambda e, vt=vt: self._update_forecast_totals(vt))
+                entry.bind("<Return>", lambda e, vt=vt: self._update_forecast_totals(vt))
+                self.forecast_retail_entries[(vt, i)] = entry
+
+            # Total label for this type
+            total_var = tk.StringVar(value="0")
+            self.forecast_total_vars[vt] = total_var
+            ttk.Label(row, textvariable=total_var, width=10, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+
+        # Grand total row
+        total_row = ttk.Frame(self.forecast_grid_frame)
+        total_row.pack(fill=tk.X, pady=(5, 0))
+
+        ttk.Label(total_row, text="TOTAL", width=8, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        self.forecast_month_totals = []
+        for i in range(num_months):
+            total_var = tk.StringVar(value="0")
+            self.forecast_month_totals.append(total_var)
+            ttk.Label(total_row, textvariable=total_var, width=10).pack(side=tk.LEFT, padx=2)
+
+        self.forecast_grand_total_var = tk.StringVar(value="0")
+        ttk.Label(
+            total_row,
+            textvariable=self.forecast_grand_total_var,
+            width=10,
+            font=("Helvetica", 9, "bold")
+        ).pack(side=tk.LEFT, padx=5)
+
+    def _update_forecast_totals(self, veh_type=None):
+        """Update total displays when user changes forecast values."""
+        num_months = int(self.forecast_months_var.get())
+
+        # Update row totals
+        grand_total = 0
+        for vt in ["TT", "FW", "MH", "TH"]:
+            row_total = 0
+            for i in range(num_months):
+                try:
+                    val = int(self.forecast_retail_entries.get((vt, i), None).get() or 0)
+                except (ValueError, AttributeError):
+                    val = 0
+                row_total += val
+            if vt in self.forecast_total_vars:
+                self.forecast_total_vars[vt].set(str(row_total))
+            grand_total += row_total
+
+        # Update column totals
+        for i in range(num_months):
+            col_total = 0
+            for vt in ["TT", "FW", "MH", "TH"]:
+                try:
+                    val = int(self.forecast_retail_entries.get((vt, i), None).get() or 0)
+                except (ValueError, AttributeError):
+                    val = 0
+                col_total += val
+            if i < len(self.forecast_month_totals):
+                self.forecast_month_totals[i].set(str(col_total))
+
+        self.forecast_grand_total_var.set(str(grand_total))
+
+    def _refresh_forecast_position(self):
+        """Refresh current position data from inventory."""
+        if not self.data_loader:
+            try:
+                self.data_loader = DataLoader(config=default_config)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load data: {e}")
+                return
+
+        try:
+            inventory = self.data_loader.load_current_inventory()
+            on_order = self.data_loader.load_on_order()
+            retail = self.data_loader.load_retail_history()
+
+            # Filter to sellable inventory
+            if "Status Category" in inventory.columns:
+                sellable = inventory[inventory["Status Category"] == "Sellable"]
+            else:
+                sellable = inventory
+
+            # Calculate by type
+            for vt in ["TT", "FW", "MH", "TH"]:
+                # Current inventory
+                inv_count = len(sellable[sellable["Veh Type"] == vt]) if "Veh Type" in sellable.columns else 0
+
+                # Pipeline
+                pipe_count = len(on_order[on_order["Veh Type"] == vt]) if not on_order.empty and "Veh Type" in on_order.columns else 0
+
+                # Monthly velocity (last 6 months)
+                from datetime import datetime, timedelta
+                cutoff = datetime.now() - timedelta(days=180)
+                if "Sold Date" in retail.columns and "Veh Type" in retail.columns:
+                    recent = retail[(retail["Sold Date"] >= cutoff) & (retail["Veh Type"] == vt)]
+                    velocity = len(recent) / 6.0
+                else:
+                    velocity = 0
+
+                # Update display
+                if vt in self.forecast_position_vars:
+                    self.forecast_position_vars[vt]["inventory"].set(f"{inv_count:,}")
+                    self.forecast_position_vars[vt]["pipeline"].set(f"{pipe_count:,}")
+                    self.forecast_position_vars[vt]["total"].set(f"{inv_count + pipe_count:,}")
+                    self.forecast_position_vars[vt]["velocity"].set(f"{velocity:.1f}/mo")
+
+            self.progress_var.set("Position data refreshed")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to refresh position: {e}")
+
+    def _populate_forecast_from_velocity(self):
+        """Populate forecast grid with historical velocity data."""
+        self._refresh_forecast_position()
+
+        if not self.data_loader:
+            return
+
+        try:
+            retail = self.data_loader.load_retail_history()
+            num_months = int(self.forecast_months_var.get())
+
+            from datetime import datetime, timedelta
+            cutoff = datetime.now() - timedelta(days=180)
+
+            for vt in ["TT", "FW", "MH", "TH"]:
+                if "Sold Date" in retail.columns and "Veh Type" in retail.columns:
+                    recent = retail[(retail["Sold Date"] >= cutoff) & (retail["Veh Type"] == vt)]
+                    monthly_velocity = len(recent) / 6.0
+                else:
+                    monthly_velocity = 0
+
+                # Populate each month with the velocity
+                for i in range(num_months):
+                    entry = self.forecast_retail_entries.get((vt, i))
+                    if entry:
+                        entry.delete(0, tk.END)
+                        entry.insert(0, str(int(round(monthly_velocity))))
+
+            self._update_forecast_totals()
+            self.progress_var.set("Forecast populated from historical velocity")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to populate from velocity: {e}")
+
+    def _run_order_forecast(self):
+        """Calculate order requirements based on forecasted retails."""
+        self._refresh_forecast_position()
+
+        if not self.data_loader:
+            messagebox.showerror("Error", "Failed to load data")
+            return
+
+        try:
+            num_months = int(self.forecast_months_var.get())
+            target_days = int(self.forecast_target_days_var.get())
+
+            inventory = self.data_loader.load_current_inventory()
+            on_order = self.data_loader.load_on_order()
+
+            # Filter to sellable
+            if "Status Category" in inventory.columns:
+                sellable = inventory[inventory["Status Category"] == "Sellable"]
+            else:
+                sellable = inventory
+
+            # Clear results
+            for item in self.forecast_results_tree.get_children():
+                self.forecast_results_tree.delete(item)
+
+            results = []
+            monthly_breakdown = {}
+            total_orders_needed = 0
+
+            for vt in ["TT", "FW", "MH", "TH"]:
+                # Current position
+                current_inv = len(sellable[sellable["Veh Type"] == vt]) if "Veh Type" in sellable.columns else 0
+                pipeline = len(on_order[on_order["Veh Type"] == vt]) if not on_order.empty and "Veh Type" in on_order.columns else 0
+
+                # Sum forecasted retails for this type
+                forecast_retail = 0
+                monthly_forecasts = []
+                for i in range(num_months):
+                    try:
+                        val = int(self.forecast_retail_entries.get((vt, i), None).get() or 0)
+                    except (ValueError, AttributeError):
+                        val = 0
+                    forecast_retail += val
+                    monthly_forecasts.append(val)
+
+                # Calculate ending inventory without new orders
+                ending_inv = current_inv + pipeline - forecast_retail
+
+                # Calculate target inventory (based on last month's forecasted velocity)
+                if monthly_forecasts:
+                    last_month_forecast = monthly_forecasts[-1] if monthly_forecasts[-1] > 0 else (forecast_retail / num_months if num_months > 0 else 0)
+                else:
+                    last_month_forecast = 0
+
+                # Target = (target_days / 30) * monthly velocity
+                target_inv = int((target_days / 30.0) * last_month_forecast)
+
+                # Orders needed = target - ending (if positive)
+                orders_needed = max(0, target_inv - ending_inv)
+
+                # Insert into treeview
+                self.forecast_results_tree.insert("", tk.END, values=(
+                    vt,
+                    f"{current_inv:,}",
+                    f"{pipeline:,}",
+                    f"{forecast_retail:,}",
+                    f"{ending_inv:,}",
+                    f"{target_inv:,}",
+                    f"{orders_needed:,}"
+                ))
+
+                results.append({
+                    "type": vt,
+                    "current_inv": current_inv,
+                    "pipeline": pipeline,
+                    "forecast_retail": forecast_retail,
+                    "ending_inv": ending_inv,
+                    "target_inv": target_inv,
+                    "orders_needed": orders_needed,
+                    "monthly_forecasts": monthly_forecasts
+                })
+
+                monthly_breakdown[vt] = monthly_forecasts
+                total_orders_needed += orders_needed
+
+            self.forecast_total_orders_var.set(f"{total_orders_needed:,}")
+
+            # Store results for export
+            self._forecast_results = {
+                "num_months": num_months,
+                "target_days": target_days,
+                "results": results,
+                "total_orders_needed": total_orders_needed
+            }
+
+            # Generate monthly breakdown text
+            self._generate_monthly_breakdown_text(results, num_months)
+
+            self.progress_var.set(f"Forecast complete: {total_orders_needed:,} orders needed")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Forecast calculation failed: {e}")
+
+    def _generate_monthly_breakdown_text(self, results, num_months):
+        """Generate the monthly breakdown text display."""
+        self.forecast_monthly_text.delete("1.0", tk.END)
+
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        start_date = datetime.now() + relativedelta(months=1)
+
+        lines = []
+        lines.append("=" * 70)
+        lines.append("MONTHLY ORDER BREAKDOWN (Company-Wide by Type)")
+        lines.append("=" * 70)
+        lines.append("")
+
+        # Header
+        header = f"{'Type':<8}"
+        for i in range(num_months):
+            month_date = start_date + relativedelta(months=i)
+            header += f"{month_date.strftime('%b %Y'):>12}"
+        header += f"{'TOTAL':>12}"
+        lines.append(header)
+        lines.append("-" * len(header))
+
+        # Data rows
+        grand_totals = [0] * num_months
+        for res in results:
+            row = f"{res['type']:<8}"
+            for i, val in enumerate(res['monthly_forecasts']):
+                row += f"{val:>12,}"
+                grand_totals[i] += val
+            row += f"{res['forecast_retail']:>12,}"
+            lines.append(row)
+
+        lines.append("-" * len(header))
+
+        # Total row
+        total_row = f"{'TOTAL':<8}"
+        for val in grand_totals:
+            total_row += f"{val:>12,}"
+        total_row += f"{sum(grand_totals):>12,}"
+        lines.append(total_row)
+
+        lines.append("")
+        lines.append("=" * 70)
+        lines.append("ORDER REQUIREMENTS SUMMARY")
+        lines.append("=" * 70)
+        lines.append("")
+
+        for res in results:
+            lines.append(f"{res['type']}: {res['orders_needed']:,} orders needed to maintain {self.forecast_target_days_var.get()} days supply")
+
+        lines.append("")
+        lines.append(f"TOTAL ORDERS NEEDED: {self._forecast_results['total_orders_needed']:,}")
+        lines.append("")
+        lines.append("Note: This represents the MAXIMUM orders by type company-wide.")
+        lines.append("Use this as the ceiling when allocating to manufacturers.")
+
+        self.forecast_monthly_text.insert("1.0", "\n".join(lines))
+
+    def _export_forecast_to_excel(self):
+        """Export forecast results to Excel."""
+        if not hasattr(self, '_forecast_results') or not self._forecast_results:
+            messagebox.showwarning("Warning", "Please run the forecast calculation first")
+            return
+
+        try:
+            import pandas as pd
+            from datetime import datetime
+            from dateutil.relativedelta import relativedelta
+
+            # Ask for save location
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx")],
+                initialfile=f"Order_Forecast_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            )
+
+            if not filename:
+                return
+
+            num_months = self._forecast_results["num_months"]
+            start_date = datetime.now() + relativedelta(months=1)
+            month_labels = [(start_date + relativedelta(months=i)).strftime("%b %Y") for i in range(num_months)]
+
+            with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                # Summary sheet
+                summary_rows = []
+                summary_rows.append(["FTRV ORDER FORECAST - COMPANY-WIDE BY TYPE", ""])
+                summary_rows.append(["Generated", datetime.now().strftime("%Y-%m-%d %H:%M")])
+                summary_rows.append(["Planning Horizon", f"{num_months} months"])
+                summary_rows.append(["Target Days Supply", self._forecast_results["target_days"]])
+                summary_rows.append(["", ""])
+                summary_rows.append(["TOTAL ORDERS NEEDED", self._forecast_results["total_orders_needed"]])
+                summary_rows.append(["", ""])
+
+                summary_rows.append(["ORDER REQUIREMENTS BY TYPE", "", "", "", "", "", ""])
+                summary_rows.append(["Type", "Current Inv", "Pipeline", "Forecast Retails", "Ending Inv", "Target Inv", "ORDERS NEEDED"])
+
+                for res in self._forecast_results["results"]:
+                    summary_rows.append([
+                        res["type"],
+                        res["current_inv"],
+                        res["pipeline"],
+                        res["forecast_retail"],
+                        res["ending_inv"],
+                        res["target_inv"],
+                        res["orders_needed"]
+                    ])
+
+                summary_df = pd.DataFrame(summary_rows)
+                summary_df.to_excel(writer, sheet_name="Summary", index=False, header=False)
+
+                # Monthly forecast sheet
+                monthly_rows = []
+                header = ["Type"] + month_labels + ["TOTAL"]
+                monthly_rows.append(header)
+
+                for res in self._forecast_results["results"]:
+                    row = [res["type"]] + res["monthly_forecasts"] + [res["forecast_retail"]]
+                    monthly_rows.append(row)
+
+                # Totals row
+                totals = ["TOTAL"]
+                for i in range(num_months):
+                    totals.append(sum(r["monthly_forecasts"][i] for r in self._forecast_results["results"]))
+                totals.append(sum(r["forecast_retail"] for r in self._forecast_results["results"]))
+                monthly_rows.append(totals)
+
+                monthly_df = pd.DataFrame(monthly_rows[1:], columns=monthly_rows[0])
+                monthly_df.to_excel(writer, sheet_name="Monthly Forecast", index=False)
+
+            self.progress_var.set(f"Exported to {filename}")
+            messagebox.showinfo("Success", f"Forecast exported to:\n{filename}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {e}")
 
     # =========================================================================
     # CAPACITY ANALYSIS TAB
